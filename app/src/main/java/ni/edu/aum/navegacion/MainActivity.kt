@@ -20,6 +20,8 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 
+
+// 1. Definición de las pantallas de la barra inferior
 sealed class BottomBarScreen(val route: String, val title: String, val icon: ImageVector) {
     object Home : BottomBarScreen("home", "Inicio", Icons.Default.Home)
     object Promos : BottomBarScreen("promos", "Ofertas", Icons.Default.LocalOffer)
@@ -38,8 +40,16 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun MainAppContainer() {
     val navController = rememberNavController()
+
+    // 2. IMPORTANTE: Instanciamos el ViewModel una sola vez aquí
+    // para compartirlo entre la pantalla de Promos y Prices.
     val viewModel: MainAppViewModel = viewModel()
-    val items = listOf(BottomBarScreen.Home, BottomBarScreen.Promos, BottomBarScreen.Prices)
+
+    val items = listOf(
+        BottomBarScreen.Home,
+        BottomBarScreen.Promos,
+        BottomBarScreen.Prices
+    )
 
     MaterialTheme(colorScheme = lightColorScheme(primary = Color(0xFF2D31FA))) {
         Scaffold(
@@ -55,7 +65,10 @@ fun MainAppContainer() {
                             selected = currentDestination?.hierarchy?.any { it.route == screen.route } == true,
                             onClick = {
                                 navController.navigate(screen.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    // Evita acumular copias de la misma pantalla en el historial
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -65,10 +78,25 @@ fun MainAppContainer() {
                 }
             }
         ) { innerPadding ->
-            NavHost(navController, startDestination = BottomBarScreen.Home.route, Modifier.padding(innerPadding)) {
-                composable(BottomBarScreen.Home.route) { HomeScreen() }
-                composable(BottomBarScreen.Promos.route) { PromotionsScreen() }
-                composable(BottomBarScreen.Prices.route) { PricesScreen(viewModel) }
+            // 3. Configuración del Navegador
+            NavHost(
+                navController = navController,
+                startDestination = BottomBarScreen.Home.route,
+                modifier = Modifier.padding(innerPadding)
+            ) {
+                composable(BottomBarScreen.Home.route) {
+                    HomeScreen()
+                }
+
+                composable(BottomBarScreen.Promos.route) {
+                    // Pasamos el viewModel para que los cupones afecten al total
+                    PromotionsScreen(viewModel)
+                }
+
+                composable(BottomBarScreen.Prices.route) {
+                    // Pasamos el viewModel para gestionar el carrito y el total
+                    PricesScreen(viewModel)
+                }
             }
         }
     }

@@ -8,9 +8,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.LocalLaundryService
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -20,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-// 1. DEFINICIÓN DE CLASE DE DATOS (Importante para evitar errores de name/description)
+// Clase de datos local
 data class ServiceItem(
     val id: Int,
     val name: String,
@@ -32,115 +38,126 @@ data class ServiceItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PricesScreen(viewModel: MainAppViewModel) {
+    val subtotal = viewModel.calculateSubtotal()
     val total = viewModel.calculateTotal()
 
-    // Gradiente azul/celeste del home
+    // Estado para mostrar la pantalla de éxito (la captura)
+    var showSuccess by remember { mutableStateOf(false) }
+
     val blueGradient = Brush.horizontalGradient(
         colors = listOf(Color(0xFF2D31FA), Color(0xFF00D4FF))
     )
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text("TARIFAS Y SERVICIOS",
-                        fontWeight = FontWeight.Black,
-                        fontSize = 18.sp,
-                        letterSpacing = 1.sp
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
-        },
-        containerColor = Color(0xFFF8F9FA)
-    ) { paddingValues -> // Corregido: nombre estándar para el Scaffold
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
+    if (showSuccess) {
+        // --- VISTA DE ÉXITO (CAPTURA DE PEDIDO) ---
+        Box(
+            modifier = Modifier.fillMaxSize().background(Color.White),
+            contentAlignment = Alignment.Center
         ) {
-            // --- TOTAL ESTIMADO EN LA PARTE SUPERIOR ---
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 12.dp),
-                color = Color.White,
-                shape = RoundedCornerShape(24.dp),
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF4CAF50),
+                    modifier = Modifier.size(120.dp)
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("¡PEDIDO ENVIADO!", fontWeight = FontWeight.Black, fontSize = 24.sp)
+                Text("Total pagado: $${String.format("%.2f", total)}", color = Color.Gray, fontSize = 18.sp)
+
+                if (viewModel.appliedDiscount > 0) {
+                    Text("Cupón: ${viewModel.activeCouponName}", color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = {
+                        viewModel.clearCart() // Limpia carrito y cupones
+                        showSuccess = false    // Vuelve a la lista
+                    },
+                    shape = RoundedCornerShape(12.dp)
                 ) {
-                    Column {
-                        Text("Total estimado", color = Color.Gray, style = MaterialTheme.typography.labelMedium)
-                        // Cambio a Dólares ($)
-                        Text("$${String.format("%.2f", total)}",
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color.Black
+                    Text("VOLVER A LA TIENDA")
+                }
+            }
+        }
+    } else {
+        // --- VISTA PRINCIPAL DE SELECCIÓN ---
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = { Text("CONFIRMAR PEDIDO", fontWeight = FontWeight.Black, fontSize = 16.sp) },
+                    colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
+                )
+            },
+            containerColor = Color(0xFFF8F9FA)
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                // PANEL DE RESUMEN (DESGLOSE)
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    shape = RoundedCornerShape(24.dp),
+                    color = Color.White,
+                    shadowElevation = 2.dp
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                            Text("Subtotal", color = Color.Gray)
+                            Text("$${String.format("%.2f", subtotal)}", fontWeight = FontWeight.Bold)
+                        }
+
+                        if (viewModel.appliedDiscount > 0) {
+                            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween) {
+                                Text(viewModel.activeCouponName, color = Color(0xFF4CAF50))
+                                Text("- $${String.format("%.2f", subtotal * viewModel.appliedDiscount)}", color = Color(0xFF4CAF50))
+                            }
+                        }
+
+                        HorizontalDivider(Modifier.padding(vertical = 12.dp), thickness = 1.dp, color = Color(0xFFF1F1F1))
+
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Text("TOTAL", fontWeight = FontWeight.ExtraBold)
+                            Text("$${String.format("%.2f", total)}", fontWeight = FontWeight.Black, fontSize = 24.sp, color = Color(0xFF2D31FA))
+                        }
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(viewModel.services) { service ->
+                        val quantity = viewModel.cartItems[service.id] ?: 0
+                        PriceCardItem(
+                            service = service,
+                            quantity = quantity,
+                            onAdd = { viewModel.addToCart(service.id) },
+                            onRemove = { viewModel.removeFromCart(service.id) }
                         )
                     }
-                    Box(
+                }
+
+                // BOTÓN DE CONFIRMAR FUNCIONAL
+                Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                    Button(
+                        onClick = {
+                            if (total > 0) showSuccess = true
+                        },
                         modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFF2D31FA).copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
+                            .fillMaxWidth(0.9f)
+                            .height(56.dp)
+                            .background(blueGradient, shape = RoundedCornerShape(16.dp)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                        contentPadding = PaddingValues(0.dp)
                     ) {
-                        Icon(Icons.Default.LocalLaundryService, null, tint = Color(0xFF2D31FA))
+                        Text("CONFIRMAR PEDIDO", fontWeight = FontWeight.ExtraBold, color = Color.White)
                     }
-                }
-            }
-
-            Text(
-                "Selecciona tus servicios",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-
-            // --- LISTA DE SERVICIOS (CORRECCIÓN PADDINGVALUES) ---
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(
-                    start = 20.dp,
-                    top = 8.dp,
-                    end = 20.dp,
-                    bottom = 20.dp // Espacio inferior estándar
-                ),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(viewModel.services) { service ->
-                    val quantity = viewModel.cartItems[service.id] ?: 0
-                    PriceCardItem(
-                        service = service,
-                        quantity = quantity,
-                        onAdd = { viewModel.addToCart(service.id) }
-                    )
-                }
-            }
-
-            // --- BOTÓN FINAL CON GRADIENTE ---
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Button(
-                    onClick = { /* Acción pagar */ },
-                    modifier = Modifier
-                        .fillMaxWidth(0.85f) // Centrado al 85% del ancho
-                        .height(56.dp)
-                        .background(blueGradient, shape = RoundedCornerShape(16.dp)),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.Transparent // Importante para ver el gradiente
-                    ),
-                    contentPadding = PaddingValues(0.dp)
-                ) {
-                    Text("REVISAR PEDIDO", fontWeight = FontWeight.ExtraBold, color = Color.White)
                 }
             }
         }
@@ -148,55 +165,37 @@ fun PricesScreen(viewModel: MainAppViewModel) {
 }
 
 @Composable
-fun PriceCardItem(service: ServiceItem, quantity: Int, onAdd: () -> Unit) {
+fun PriceCardItem(service: ServiceItem, quantity: Int, onAdd: () -> Unit, onRemove: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(service.color),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.LocalLaundryService, null, tint = Color.DarkGray)
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(service.color), contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.LocalLaundryService, null, tint = Color.DarkGray, modifier = Modifier.size(20.dp))
             }
-
-            Spacer(modifier = Modifier.width(16.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Text(service.name, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-                Text(service.description, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Text("$${String.format("%.2f", service.price)} / unidad",
-                    color = Color(0xFF2D31FA),
-                    fontWeight = FontWeight.Black,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(service.name, fontWeight = FontWeight.Bold)
+                Text("$${String.format("%.2f", service.price)}", color = Color(0xFF2D31FA), fontWeight = FontWeight.ExtraBold)
             }
-
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (quantity > 0) {
-                    Text("$quantity",
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(end = 8.dp),
-                        color = Color.Black
-                    )
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFFFFEBEE))
+                    ) {
+                        Icon(Icons.Default.Remove, null, tint = Color.Red, modifier = Modifier.size(16.dp))
+                    }
+                    Text("$quantity", Modifier.padding(horizontal = 8.dp), fontWeight = FontWeight.Bold)
                 }
                 IconButton(
                     onClick = onAdd,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFFF1F1F1))
+                    modifier = Modifier.size(32.dp).clip(CircleShape).background(Color(0xFFE8EAF6))
                 ) {
-                    Icon(Icons.Default.Add, null, tint = Color.Black)
+                    Icon(Icons.Default.Add, null, tint = Color(0xFF2D31FA), modifier = Modifier.size(16.dp))
                 }
             }
         }

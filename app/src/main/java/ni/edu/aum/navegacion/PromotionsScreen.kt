@@ -1,5 +1,6 @@
 package ni.edu.aum.navegacion
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,18 +12,19 @@ import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
-// Modelo de datos para las ofertas
+// 1. Modelo de datos
 data class Promotion(
     val title: String,
     val description: String,
@@ -33,14 +35,18 @@ data class Promotion(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PromotionsScreen() {
-    // Lista de promociones dinámicas
-    val promotions = listOf(
-        Promotion("LAVADO EXPRESS", "15% de descuento en tu primer pedido", "HOLA15", Color(0xFFE3F2FD), Icons.Default.Star),
-        Promotion("SUPER PLANCHADO", "Planchado gratis en más de 10 prendas", "IRONFREE", Color(0xFFFFF3E0), Icons.Default.Timer),
-        Promotion("OFERTA FIN DE SEMANA", "2x1 en lavado de edredones", "WEEKEND", Color(0xFFF1F8E9), Icons.Default.LocalOffer),
-        Promotion("CLIENTE VIP", "Descuento acumulable del 10%", "VIP2024", Color(0xFFF3E5F5), Icons.Default.Star)
-    )
+fun PromotionsScreen(viewModel: MainAppViewModel) {
+    val scope = rememberCoroutineScope()
+
+    // Usamos mutableStateListOf para que la lista reaccione a las eliminaciones con animación
+    val promotions = remember {
+        mutableStateListOf(
+            Promotion("LAVADO EXPRESS", "15% de descuento en tu primer pedido", "HOLA15", Color(0xFFE3F2FD), Icons.Default.Star),
+            Promotion("SUPER PLANCHADO", "Planchado gratis en más de 10 prendas", "IRONFREE", Color(0xFFFFF3E0), Icons.Default.Timer),
+            Promotion("OFERTA FIN DE SEMANA", "20% dto. en pedidos mayores a $20", "WEEKEND", Color(0xFFF1F8E9), Icons.Default.LocalOffer),
+            Promotion("CLIENTE VIP", "Descuento acumulable del 10%", "VIP2024", Color(0xFFF3E5F5), Icons.Default.Star)
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -52,12 +58,10 @@ fun PromotionsScreen() {
                         letterSpacing = 2.sp
                     )
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.White
-                )
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(containerColor = Color.White)
             )
         },
-        containerColor = Color(0xFFF8F9FA) // Fondo gris claro para que resalten los cupones
+        containerColor = Color(0xFFF8F9FA)
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -75,15 +79,36 @@ fun PromotionsScreen() {
                 )
             }
 
-            items(promotions) { promo ->
-                CouponItem(promo)
+            items(promotions, key = { it.code }) { promo ->
+                var isVisible by remember { mutableStateOf(true) }
+
+                // Animación de salida: Desplazamiento a la derecha + desvanecimiento
+                AnimatedVisibility(
+                    visible = isVisible,
+                    exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut()
+                ) {
+                    CouponItem(
+                        promo = promo,
+                        viewModel = viewModel,
+                        onUsed = { exito ->
+                            if (exito) {
+                                scope.launch {
+                                    delay(300) // Pausa para feedback visual del botón
+                                    isVisible = false // Inicia animación
+                                    delay(500) // Espera a que termine la animación
+                                    promotions.remove(promo) // Quita de la lista
+                                }
+                            }
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun CouponItem(promo: Promotion) {
+fun CouponItem(promo: Promotion, viewModel: MainAppViewModel, onUsed: (Boolean) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -137,7 +162,7 @@ fun CouponItem(promo: Promotion) {
                     lineHeight = 18.sp
                 )
                 Spacer(modifier = Modifier.height(8.dp))
-                // Badge del Código
+
                 Surface(
                     color = Color.White.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(8.dp)
@@ -151,7 +176,7 @@ fun CouponItem(promo: Promotion) {
                 }
             }
 
-            // Sección Derecha: Botón
+            // Sección Derecha: Botón funcional con feedback
             Box(
                 modifier = Modifier
                     .fillMaxHeight()
@@ -159,7 +184,11 @@ fun CouponItem(promo: Promotion) {
                 contentAlignment = Alignment.Center
             ) {
                 Button(
-                    onClick = { /* Acción */ },
+                    onClick = {
+                        val resultado = viewModel.applyCoupon(promo.code)
+                        // Si el mensaje del VM es de éxito, avisamos para iniciar animación
+                        onUsed(resultado == "¡Cupón aplicado!")
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                     contentPadding = PaddingValues(horizontal = 16.dp),
                     shape = RoundedCornerShape(12.dp)
